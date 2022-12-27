@@ -1,6 +1,6 @@
 /*
 rhenry74
-I2C ADA1701 HowTo
+I2C ADAU1701 HowTo
 */
 
 #include "Arduino.h"
@@ -51,11 +51,14 @@ I2C ADA1701 HowTo
 
 //sadly my wifi implementation is incomplete
 //you should be able to connect in access point mode and set your ssid and password thru the web ui
-const char *ssid = "primary";
-const char *password = "yeahright";
+const char *ssid = "BOLDN2-5";
+const char *password = "adg881fc";
 
 const char *ssid2 = "backup";
 const char *password2 = "yeahright";
+
+const char *access_point = "ADAU1701HT";
+const char *access_point_password = "LetsGo";
 
 WebServer server(80);
 
@@ -694,12 +697,9 @@ void printArray(byte dat[], int len)
   Serial.println(dat[idx], HEX);
 }
 
-char cmd = 's';
-char amp_control_cmd[4];
-
 void setup() 
 {
-  //Heltec.begin initializes Serial
+  //Serial.begin(115200);
     
   pinMode(LED1,OUTPUT); 
   digitalWrite(LED1,HIGH); 
@@ -708,8 +708,8 @@ void setup()
   pinMode(I2C_SDA, INPUT);  
   digitalWrite(LED1,LOW);
     
-  Heltec.begin(true /*DisplayEnable Enable*/, true /*LoRa Disable*/, true /*Serial Enable*/);
-  //Heltec.display->flipScreenVertically();
+  Heltec.begin(true /*DisplayEnable Enable*/, false /*LoRa Enable*/, true /*Serial Enable*/);
+  Heltec.display->flipScreenVertically();
   Heltec.display->setColor(WHITE);
   Heltec.display->setFont(ArialMT_Plain_10);
   Heltec.display->clear();
@@ -755,6 +755,9 @@ void setup()
   pinMode(VOLUME_RED, INPUT_PULLUP);
   
 }
+
+char cmd = 's';
+char amp_control_cmd[4];
 
 void SetupWebServer()
 {
@@ -893,11 +896,13 @@ void ProcessWIFI()
   if (wifi_state == 3)
   {
     //enter access point mode
-    Serial.println("Configuring access point mode.");
+    Serial.print("Configuring access point mode: ");
+   
     WiFi.disconnect();
     WiFi.softAPdisconnect(true);
-    ssid="ADA1701HT";
-    password = "LetsGo!";
+    ssid = access_point;
+    password = access_point_password;
+    Serial.println(ssid);
     WiFi.softAP(ssid, password);
     //WiFi.status() should always be WL_CONNECTED in this mode, right?
     IPAddress softIP = WiFi.softAPIP();
@@ -949,11 +954,13 @@ void loop() {
   
   UpdateDisplay();
 
-  byte write_buffer[4];
-  byte dsp_adr_msb = 0;
-  byte dsp_adr_lsb = 0;
-
-  if (Serial.available())
+  int avail = Serial.available();
+  if (avail > 0)
+  {
+    delay(100);
+    avail = Serial.available();    
+  }
+  if (avail == 4)
   {
     cmd = Serial.read();
 
@@ -963,12 +970,20 @@ void loop() {
       Serial.read();//throw away space
       amp_control_cmd[0] = Serial.read();
       amp_control_cmd[1] = Serial.read();
-      if (Serial.available())
-        amp_control_cmd[2] = Serial.read();
-      else
-        amp_control_cmd[2] = 0;
-      amp_control_cmd[3] = 0;
+      amp_control_cmd[2] = 0;
     }
+    else
+    {
+      Serial.print("cmd: ");
+      Serial.println(cmd);
+    }
+  }
+  else if (avail > 0)
+  {
+    Serial.print("Flushing Serial: ");
+    Serial.println(avail);
+    while (Serial.available() > 0)
+      Serial.read();
   }
   
   if (cmd != 's')
@@ -977,8 +992,8 @@ void loop() {
     
     if (cmd == 'a' || cmd == 'A') //A is from the web
     {
-      String amp_control_cmd_String = amp_control_cmd;
-      Serial.print(amp_control_cmd_String);
+      //String amp_control_cmd_String = amp_control_cmd;
+      Serial.print(amp_control_cmd);
       Serial.print(":");
       if (strcmp(amp_control_cmd,"tu") == 0)
         TrebleUp();
@@ -1016,8 +1031,9 @@ void loop() {
       else
       {
         if (cmd == 'A')
-          server.send(404, "text/plain", "Amp: '" + amp_control_cmd_String + "' unknown");
-        Serial.println("amp_control_cmd unknown");
+          server.send(404, "text/plain", "Amp: '" + String(amp_control_cmd) + "' unknown");
+        Serial.print("amp_control_cmd unknown: ");
+        Serial.println(amp_control_cmd);
         cmd = 's';
         return;
       }
